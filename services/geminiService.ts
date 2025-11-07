@@ -1,13 +1,22 @@
 import { GoogleGenAI, Modality } from "@google/genai";
 import type { GenerateContentResponse } from "@google/genai";
 
-const API_KEY = process.env.API_KEY;
+// Lazily initialize the AI client to avoid crashing the app on load
+// if the API key is not available in the environment.
+let ai: GoogleGenAI | null = null;
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable is not set.");
-}
-
-const ai = new GoogleGenAI({ apiKey: API_KEY });
+const getAiClient = () => {
+    if (!ai) {
+        const API_KEY = process.env.API_KEY;
+        if (!API_KEY) {
+            // Throw an error that can be caught by the calling function
+            // instead of crashing the entire application at module load time.
+            throw new Error("API_KEY environment variable is not set.");
+        }
+        ai = new GoogleGenAI({ apiKey: API_KEY });
+    }
+    return ai;
+};
 
 const fileToGenerativePart = (base64: string, mimeType: string) => {
   return {
@@ -33,6 +42,7 @@ export const generateImageWithStyle = async (
   atmosphere?: string | null,
   imageQuality?: 'standard' | 'high' | null,
 ): Promise<string> => {
+  const aiClient = getAiClient();
   let prompt = `Analyze the provided image of a room. Your task is to re-decorate this exact room in a ${style} style. It is crucial that you DO NOT alter the core structure of the room. This includes walls, windows, doors, ceiling height, and overall room layout. Only change the furniture, wall colors, flooring, lighting, and decorative items to fit the new style.`;
 
   if (colorPalette) {
@@ -49,7 +59,7 @@ export const generateImageWithStyle = async (
   const base64Data = originalImage.split(',')[1];
   const imagePart = fileToGenerativePart(base64Data, mimeType);
 
-  const response: GenerateContentResponse = await ai.models.generateContent({
+  const response: GenerateContentResponse = await aiClient.models.generateContent({
     model: 'gemini-2.5-flash-image',
     contents: { parts: [imagePart, { text: prompt }] },
     config: {
@@ -71,6 +81,7 @@ export const applyStyleFromReference = async (
   styleReferenceImage: string,
   imageQuality?: 'standard' | 'high' | null,
 ): Promise<string> => {
+    const aiClient = getAiClient();
     let prompt = `You are an expert interior designer. Your task is to redesign the room in the first image (the target) to perfectly match the aesthetic of the second image (the style reference).
 - Replicate the style, color palette, furniture choices, materials, and overall mood from the style reference image.
 - CRUCIAL: Do not alter the architectural elements of the target image. The walls, windows, doors, and overall layout of the target room must remain unchanged. You are only re-decorating it.`;
@@ -87,7 +98,7 @@ export const applyStyleFromReference = async (
     const refBase64 = styleReferenceImage.split(',')[1];
     const refImagePart = fileToGenerativePart(refBase64, refMimeType);
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
+    const response: GenerateContentResponse = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts: [targetImagePart, refImagePart, { text: prompt }] },
         config: {
@@ -110,6 +121,7 @@ export const refineImageWithText = async (
     prompt: string,
     imageQuality?: 'standard' | 'high' | null,
 ): Promise<string> => {
+    const aiClient = getAiClient();
     const mimeType = getMimeType(baseImage);
     const base64Data = baseImage.split(',')[1];
     const imagePart = fileToGenerativePart(base64Data, mimeType);
@@ -119,7 +131,7 @@ export const refineImageWithText = async (
         fullPrompt += ` (Render the result with high fidelity and photorealistic details.)`;
     }
 
-    const response: GenerateContentResponse = await ai.models.generateContent({
+    const response: GenerateContentResponse = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: { parts: [imagePart, { text: fullPrompt }] },
         config: {
@@ -138,7 +150,8 @@ export const refineImageWithText = async (
 
 
 export const getChatResponse = async (prompt: string): Promise<string> => {
-  const response = await ai.models.generateContent({
+  const aiClient = getAiClient();
+  const response = await aiClient.models.generateContent({
     model: 'gemini-2.5-flash',
     contents: prompt,
   });
@@ -149,6 +162,7 @@ export const getShoppingSuggestions = async (
     baseImage: string,
     prompt: string
 ): Promise<string> => {
+    const aiClient = getAiClient();
     const mimeType = getMimeType(baseImage);
     const base64Data = baseImage.split(',')[1];
     const imagePart = fileToGenerativePart(base64Data, mimeType);
@@ -156,7 +170,7 @@ export const getShoppingSuggestions = async (
 - **[Minimalist Oak Coffee Table](https://example.com/shop/minimalist-oak-table)** - A beautiful and functional centerpiece for your living room.
 - **[Cozy Boucle Accent Chair](https://example.com/shop/boucle-accent-chair)** - Perfect for reading nooks and adding a touch of texture.`;
     
-    const response = await ai.models.generateContent({
+    const response = await aiClient.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [imagePart, { text: fullPrompt }] },
     });
