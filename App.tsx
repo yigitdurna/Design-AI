@@ -207,7 +207,11 @@ const App: React.FC = () => {
         }
         setAppState('ready');
     } catch (err) {
-        setError('Failed to generate all images. Please try again.');
+        if (err instanceof Error) {
+            setError(err.message);
+        } else {
+            setError('Failed to generate images. An unknown error occurred.');
+        }
         setAppState('initial');
         console.error(err);
     } finally {
@@ -216,14 +220,14 @@ const App: React.FC = () => {
   }, [originalImages, selectedStyle, selectedColorPalette, selectedAtmosphere, selectedQuality]);
   
   const handleSendMessage = async (message: string, isShoppingQuery: boolean) => {
-      if (selectedResultIndex === null) return;
+      if (selectedResultIndex === null && chatMode === 'design') return;
 
       const newUserMessage: ChatMessage = { id: Date.now().toString(), role: 'user', text: message };
       setChatMessages(prev => [...prev, newUserMessage]);
       setIsChatLoading(true);
       setError(null);
 
-      const baseImage = generatedImages[selectedResultIndex];
+      const baseImage = selectedResultIndex !== null ? generatedImages[selectedResultIndex] : undefined;
 
       try {
           let modelResponseText: string;
@@ -232,7 +236,7 @@ const App: React.FC = () => {
                     modelResponseText = await getShoppingSuggestions(baseImage, message);
                } else {
                     const refinedImage = await refineImageWithText(baseImage, message, selectedQuality);
-                    setGeneratedImages(prev => ({ ...prev, [selectedResultIndex]: refinedImage })); // Update the specific image
+                    setGeneratedImages(prev => ({ ...prev, [selectedResultIndex!]: refinedImage })); // Update the specific image
                     modelResponseText = "I've updated the selected design. What do you think?";
                }
           } else {
@@ -243,7 +247,10 @@ const App: React.FC = () => {
 
       } catch (err) {
           console.error(err);
-          const errorText = "Sorry, I couldn't process that request. Please try again.";
+          let errorText = "Sorry, I couldn't process that request. Please try again.";
+          if (err instanceof Error) {
+              errorText = err.message;
+          }
           const errorMessage: ChatMessage = { id: (Date.now() + 1).toString(), role: 'model', text: errorText };
           setChatMessages(prev => [...prev, errorMessage]);
       } finally {
@@ -308,7 +315,14 @@ const App: React.FC = () => {
   
   const MainInterface = () => (
     <div className="w-full">
-        {error && <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md" role="alert">{error}</div>}
+        {error && 
+            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md flex justify-between items-center" role="alert">
+                <span>{error}</span>
+                <button onClick={() => setError(null)} className="p-1 text-red-700 hover:bg-red-200 rounded-full" aria-label="Dismiss error">
+                    <XIcon className="w-4 h-4" />
+                </button>
+            </div>
+        }
         
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-1">

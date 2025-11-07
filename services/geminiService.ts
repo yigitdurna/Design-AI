@@ -7,11 +7,12 @@ let ai: GoogleGenAI | null = null;
 
 const getAiClient = () => {
     if (!ai) {
-        const API_KEY = process.env.API_KEY;
+        // Safely access the API key to prevent ReferenceError in browser environments
+        const API_KEY = (typeof process !== 'undefined' && process.env) ? process.env.API_KEY : undefined;
+
         if (!API_KEY) {
-            // Throw an error that can be caught by the calling function
-            // instead of crashing the entire application at module load time.
-            throw new Error("API_KEY environment variable is not set.");
+            // Throw a user-friendly error that can be caught by the calling function.
+            throw new Error("API key is missing. Please make sure it's configured in your environment.");
         }
         ai = new GoogleGenAI({ apiKey: API_KEY });
     }
